@@ -1,72 +1,140 @@
 
 export const generateRealisticInstrumentSample = (instrumentType: string, variationType: string, time: number, frequency: number): number => {
-  const fundamental = Math.sin(2 * Math.PI * frequency * time);
-  
   switch (instrumentType) {
     case 'guitar':
-      // Guitar with realistic harmonics and slight inharmonicity
-      const harmonics = [
-        { freq: 1, amp: 1.0 },
-        { freq: 2, amp: 0.6 },
-        { freq: 3, amp: 0.4 },
-        { freq: 4, amp: 0.3 },
-        { freq: 5, amp: 0.2 }
-      ];
-      let guitarSample = 0;
-      harmonics.forEach(h => {
-        guitarSample += h.amp * Math.sin(2 * Math.PI * frequency * h.freq * time * (1 + 0.001 * h.freq));
-      });
-      // Add slight distortion for electric guitar
-      if (variationType.includes('electric')) {
-        guitarSample = Math.tanh(guitarSample * 1.5);
-      }
-      return guitarSample * 0.7;
-             
+      return generateGuitarSample(variationType, time, frequency);
     case 'piano':
-      // Piano with complex harmonic series and inharmonicity
-      let pianoSample = fundamental;
-      for (let harmonic = 2; harmonic <= 8; harmonic++) {
-        const inharmonicity = 1 + 0.0001 * harmonic * harmonic;
-        const amplitude = 1 / (harmonic * harmonic);
-        pianoSample += amplitude * Math.sin(2 * Math.PI * frequency * harmonic * inharmonicity * time);
-      }
-      // Add slight noise for realism
-      pianoSample += (Math.random() - 0.5) * 0.05;
-      return pianoSample * 0.6;
-             
+      return generatePianoSample(time, frequency);
     case 'violin':
-      // Violin with strong odd harmonics and vibrato
-      const vibrato = 1 + 0.02 * Math.sin(2 * Math.PI * 5 * time); // 5Hz vibrato
-      let violinSample = Math.sin(2 * Math.PI * frequency * vibrato * time);
-      violinSample += 0.7 * Math.sin(2 * Math.PI * frequency * 3 * vibrato * time); // 3rd harmonic
-      violinSample += 0.5 * Math.sin(2 * Math.PI * frequency * 5 * vibrato * time); // 5th harmonic
-      violinSample += 0.3 * Math.sin(2 * Math.PI * frequency * 7 * vibrato * time); // 7th harmonic
-      return violinSample * 0.6;
-             
+      return generateViolinSample(time, frequency);
     case 'synth':
-      if (variationType.includes('lead')) {
-        // Lead synth with saw wave and filter sweep
-        const sawWave = (2 / Math.PI) * Math.atan(Math.tan(Math.PI * frequency * time));
-        const filterFreq = 800 + 400 * Math.sin(time * 2);
-        const cutoff = Math.min(1, filterFreq / frequency);
-        return sawWave * cutoff * 0.8;
-      } else {
-        // Pad synth with multiple detuned oscillators
-        const osc1 = Math.sin(2 * Math.PI * frequency * time);
-        const osc2 = Math.sin(2 * Math.PI * frequency * 1.005 * time);
-        const osc3 = Math.sin(2 * Math.PI * frequency * 0.995 * time);
-        return (osc1 + osc2 + osc3) * 0.5;
-      }
-             
+      return generateSynthSample(variationType, time, frequency);
     case 'bass':
-      // Bass with sub harmonics and slight distortion
-      let bassSample = fundamental;
-      bassSample += 0.3 * Math.sin(2 * Math.PI * frequency * 0.5 * time); // Sub octave
-      bassSample += 0.8 * Math.sin(2 * Math.PI * frequency * 2 * time); // Octave
-      bassSample = Math.tanh(bassSample * 1.2); // Slight compression
-      return bassSample * 0.9;
-             
+      return generateBassSample(time, frequency);
     default:
-      return fundamental * 0.7;
+      return generateDefaultSample(time, frequency);
   }
+};
+
+const generateGuitarSample = (variationType: string, time: number, frequency: number): number => {
+  // Realistic guitar with string resonance
+  let sample = 0;
+  
+  // Fundamental and harmonics with realistic amplitudes
+  const harmonics = [1, 0.7, 0.5, 0.3, 0.2, 0.15, 0.1];
+  
+  for (let h = 0; h < harmonics.length; h++) {
+    const harmonic = h + 1;
+    const amplitude = harmonics[h];
+    // Add slight inharmonicity for realism
+    const freq = frequency * harmonic * (1 + 0.001 * harmonic);
+    sample += amplitude * Math.sin(2 * Math.PI * freq * time);
+  }
+  
+  // Add pluck attack simulation
+  const pluckEnvelope = Math.exp(-time * 8);
+  sample *= pluckEnvelope;
+  
+  // Electric guitar distortion
+  if (variationType.includes('electric')) {
+    sample = Math.tanh(sample * 2) * 0.7;
+  }
+  
+  return sample * 0.6;
+};
+
+const generatePianoSample = (time: number, frequency: number): number => {
+  let sample = 0;
+  
+  // Piano harmonics with realistic decay rates
+  const harmonics = [
+    { ratio: 1, amp: 1.0, decay: 1 },
+    { ratio: 2, amp: 0.8, decay: 1.2 },
+    { ratio: 3, amp: 0.6, decay: 1.5 },
+    { ratio: 4, amp: 0.4, decay: 2 },
+    { ratio: 5, amp: 0.3, decay: 2.5 },
+    { ratio: 6, amp: 0.2, decay: 3 }
+  ];
+  
+  for (const h of harmonics) {
+    const freq = frequency * h.ratio;
+    const envelope = Math.exp(-time * h.decay);
+    sample += h.amp * Math.sin(2 * Math.PI * freq * time) * envelope;
+  }
+  
+  // Add hammer noise for attack
+  const attack = time < 0.01 ? Math.random() * 0.1 * Math.exp(-time * 100) : 0;
+  
+  return (sample + attack) * 0.5;
+};
+
+const generateViolinSample = (time: number, frequency: number): number => {
+  // Violin with bow simulation and vibrato
+  const vibrato = 1 + 0.015 * Math.sin(2 * Math.PI * 6 * time); // 6Hz vibrato
+  
+  let sample = 0;
+  
+  // Strong odd harmonics characteristic of bowed strings
+  const harmonics = [1, 0.1, 0.8, 0.1, 0.6, 0.1, 0.4, 0.1, 0.3];
+  
+  for (let h = 0; h < harmonics.length; h++) {
+    const harmonic = h + 1;
+    const amplitude = harmonics[h];
+    const freq = frequency * harmonic * vibrato;
+    sample += amplitude * Math.sin(2 * Math.PI * freq * time);
+  }
+  
+  // Bow noise for realism
+  const bowNoise = (Math.random() - 0.5) * 0.02 * Math.sin(time * 20);
+  
+  return (sample + bowNoise) * 0.5;
+};
+
+const generateSynthSample = (variationType: string, time: number, frequency: number): number => {
+  if (variationType.includes('lead')) {
+    // Bright lead synth with filter sweep
+    const saw = sawWave(frequency, time);
+    const cutoffFreq = 1000 + 500 * Math.sin(time * 3);
+    const resonance = 0.8;
+    
+    // Simple lowpass filter simulation
+    const cutoffRatio = Math.min(1, cutoffFreq / (frequency * 4));
+    return saw * cutoffRatio * 0.7;
+  } else {
+    // Warm pad with chorus effect
+    const osc1 = Math.sin(2 * Math.PI * frequency * time);
+    const osc2 = Math.sin(2 * Math.PI * frequency * 1.007 * time); // Slight detune
+    const osc3 = Math.sin(2 * Math.PI * frequency * 0.993 * time); // Opposite detune
+    
+    return (osc1 + osc2 + osc3) * 0.4;
+  }
+};
+
+const generateBassSample = (time: number, frequency: number): number => {
+  // Deep bass with sub harmonics
+  const fundamental = Math.sin(2 * Math.PI * frequency * time);
+  const subOctave = Math.sin(2 * Math.PI * frequency * 0.5 * time) * 0.3;
+  const secondHarmonic = Math.sin(2 * Math.PI * frequency * 2 * time) * 0.6;
+  
+  let sample = fundamental + subOctave + secondHarmonic;
+  
+  // Bass compression/saturation
+  sample = Math.tanh(sample * 1.5) * 0.8;
+  
+  return sample;
+};
+
+const generateDefaultSample = (time: number, frequency: number): number => {
+  // Clean sine wave with subtle harmonics
+  const fundamental = Math.sin(2 * Math.PI * frequency * time);
+  const second = Math.sin(2 * Math.PI * frequency * 2 * time) * 0.3;
+  const third = Math.sin(2 * Math.PI * frequency * 3 * time) * 0.1;
+  
+  return (fundamental + second + third) * 0.6;
+};
+
+const sawWave = (frequency: number, time: number): number => {
+  const period = 1 / frequency;
+  const phase = (time % period) / period;
+  return 2 * phase - 1;
 };
