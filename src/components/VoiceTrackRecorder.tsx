@@ -101,18 +101,34 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       const localPitchData = await extractPitchSequence(audioBlob);
       setDetectedMelody(localPitchData);
       
-      // Step 2: Use Rilla AI to analyze and clean up the melody
+      // Step 2: Clean and filter the note sequence
+      const cleanNotes = localPitchData
+        .map(p => p.note)
+        .filter(note => note && !note.includes('NaN') && note !== 'C4') // Filter out NaN and default values
+        .reduce((acc, note, index, array) => {
+          // Remove excessive repetition - only keep if different from previous or part of a short sequence
+          if (index === 0 || note !== array[index - 1]) {
+            acc.push(note);
+          } else if (acc.length > 0 && acc[acc.length - 1] === note) {
+            // Skip if same as previous note (already added)
+            return acc;
+          }
+          return acc;
+        }, [] as string[]);
+
+      console.log('Cleaned note sequence:', cleanNotes);
+      
+      // Step 3: Use Rilla AI to analyze and clean up the melody
       toast({
         title: "Rilla AI Processing",
         description: "Analyzing your melody with Claude 3.5 Sonnet...",
       });
 
-      const noteSequence = localPitchData.map(p => p.note).filter(note => note && !note.includes('NaN'));
-      const rillaAnalysis = await analyzeMelodyWithRilla(noteSequence, instrument.id);
+      const rillaAnalysis = await analyzeMelodyWithRilla(cleanNotes, instrument.id);
       
       console.log('Rilla AI melody analysis:', rillaAnalysis);
 
-      // Step 3: Generate instrument tracks using Rilla AI
+      // Step 4: Generate instrument tracks using Rilla AI
       const variations: TrackVariation[] = [];
       
       for (let i = 0; i < Math.min(3, instrument.variations.length); i++) {
@@ -120,7 +136,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
         
         toast({
           title: "Generating Tracks",
-          description: `Creating ${formatVariationName(variationType)} with LLaMA 4 Maverick...`,
+          description: `Creating ${formatVariationName(variationType)} with improved audio synthesis...`,
         });
 
         const audioUrl = await generateInstrumentTrackWithRilla(
@@ -145,7 +161,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       
       toast({
         title: "Rilla AI Success!",
-        description: `Created ${variations.length} ${instrument.name} variations in ${rillaAnalysis.detectedKey}`,
+        description: `Created ${variations.length} realistic ${instrument.name} variations`,
       });
     } catch (error) {
       console.error('Rilla AI melody processing error:', error);
@@ -295,7 +311,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
           <span>Voice to Melody (Rilla AI)</span>
         </CardTitle>
         <CardDescription>
-          Hum or sing a melody - Rilla AI will capture the pitch sequence and convert it to your chosen instrument
+          Hum or sing a melody - Rilla AI will capture the pitch sequence and create realistic instrument sounds
         </CardDescription>
       </CardHeader>
       
@@ -315,10 +331,10 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
 
         {detectedMelody.length > 0 && (
           <div className="bg-muted/10 p-4 rounded-lg border border-dark-border">
-            <h4 className="text-sm font-medium text-gray-300 mb-2">Raw Melody Captured:</h4>
+            <h4 className="text-sm font-medium text-gray-300 mb-2">Melody Captured:</h4>
             <div className="text-xs text-gray-400">
-              <p>Notes detected: {detectedMelody.map(p => p.note).join(' → ')}</p>
-              <p>Duration: {detectedMelody.length} notes (being processed by Rilla AI...)</p>
+              <p>Notes detected: {detectedMelody.map(p => p.note).filter(note => note && !note.includes('NaN')).slice(0, 20).join(' → ')}{detectedMelody.length > 20 ? '...' : ''}</p>
+              <p>Duration: {detectedMelody.filter(p => p.note && !p.note.includes('NaN')).length} clean notes (processing with Rilla AI...)</p>
             </div>
           </div>
         )}
@@ -332,10 +348,11 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
         {/* Rilla AI Info */}
         {!isProcessing && (
           <div className="bg-muted/10 p-3 rounded-lg border border-dark-border">
-            <p className="text-xs text-gray-400 mb-1">Powered by Rilla AI:</p>
+            <p className="text-xs text-gray-400 mb-1">Powered by Rilla AI + Enhanced Audio:</p>
             <div className="text-xs space-y-1">
-              <p className="text-neon-blue">• Claude 3.5 Sonnet - Melody Analysis & Key Detection</p>
-              <p className="text-neon-green">• LLaMA 4 Maverick - Instrument Track Generation</p>
+              <p className="text-neon-blue">• Claude 3.5 Sonnet - Melody Analysis & Musical Theory</p>
+              <p className="text-neon-green">• LLaMA 4 Maverick - Instrument Parameter Generation</p>
+              <p className="text-neon-purple">• Enhanced Audio Synthesis - Realistic Instrument Modeling</p>
             </div>
           </div>
         )}
