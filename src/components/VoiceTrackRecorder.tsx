@@ -1,3 +1,4 @@
+
 import { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mic } from 'lucide-react';
@@ -16,6 +17,14 @@ interface TrackVariation {
   type: string;
   audioUrl: string;
   confidence: number;
+  melody: number[];
+}
+
+interface PitchData {
+  time: number;
+  frequency: number;
+  note: string;
+  confidence: number;
 }
 
 const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
@@ -24,6 +33,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordedVoiceUrl, setRecordedVoiceUrl] = useState<string>('');
   const [trackVariations, setTrackVariations] = useState<TrackVariation[]>([]);
+  const [detectedMelody, setDetectedMelody] = useState<PitchData[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const { toast } = useToast();
 
@@ -50,7 +60,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
         const audioBlob = new Blob(chunks, { type: 'audio/wav' });
         const voiceUrl = URL.createObjectURL(audioBlob);
         setRecordedVoiceUrl(voiceUrl);
-        await generateTrackVariations(audioBlob);
+        await analyzePitchAndGenerateVariations(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -60,7 +70,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       const instrument = INSTRUMENT_OPTIONS.find(i => i.id === selectedInstrument);
       toast({
         title: "Recording Started",
-        description: `Make ${instrument?.name} sounds with your voice`,
+        description: `Hum your melody - we'll capture the pitch sequence for ${instrument?.name}`,
       });
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -79,7 +89,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
     }
   };
 
-  const generateTrackVariations = async (audioBlob: Blob) => {
+  const analyzePitchAndGenerateVariations = async (audioBlob: Blob) => {
     setIsProcessing(true);
     setTrackVariations([]);
     
@@ -87,33 +97,47 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       const instrument = INSTRUMENT_OPTIONS.find(i => i.id === selectedInstrument);
       if (!instrument) return;
 
+      // Analyze pitch from the audio blob
+      const pitchData = await extractPitchSequence(audioBlob);
+      setDetectedMelody(pitchData);
+      
+      // Convert to musical notes and find best key
+      const melody = pitchData.map(p => p.frequency);
+      const bestKey = findBestKey(melody);
+      const quantizedNotes = quantizeToKey(melody, bestKey);
+      
+      console.log('Detected melody:', pitchData.map(p => p.note));
+      console.log('Best key:', bestKey);
+      console.log('Quantized notes:', quantizedNotes);
+
       // Generate multiple variations for the selected instrument
       const variations: TrackVariation[] = [];
       
-      for (let i = 0; i < instrument.variations.length; i++) {
+      for (let i = 0; i < Math.min(3, instrument.variations.length); i++) {
         const variationType = instrument.variations[i];
-        const audioUrl = await generateAudioForVariation(instrument.id, variationType, i);
+        const audioUrl = await generateMelodicAudio(instrument.id, variationType, quantizedNotes, bestKey);
         
         variations.push({
           id: `${instrument.id}-${variationType}-${Date.now()}-${i}`,
-          name: formatVariationName(variationType),
+          name: `${formatVariationName(variationType)} in ${bestKey}`,
           type: variationType,
           audioUrl,
-          confidence: 0.9 - (i * 0.1) // Decreasing confidence for demo
+          confidence: 0.9 - (i * 0.1),
+          melody: quantizedNotes
         });
       }
 
       setTrackVariations(variations);
       
       toast({
-        title: "Variations Generated!",
-        description: `Created ${variations.length} ${instrument.name} variations from your voice`,
+        title: "Melody Captured!",
+        description: `Created ${variations.length} ${instrument.name} variations with your melody in ${bestKey}`,
       });
     } catch (error) {
-      console.error('Voice processing error:', error);
+      console.error('Pitch analysis error:', error);
       toast({
         title: "Processing Error",
-        description: "Could not generate track variations",
+        description: "Could not analyze pitch sequence",
         variant: "destructive",
       });
     } finally {
@@ -121,30 +145,154 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
     }
   };
 
-  const generateAudioForVariation = async (instrumentId: string, variationType: string, index: number): Promise<string> => {
+  const extractPitchSequence = async (audioBlob: Blob): Promise<PitchData[]> => {
+    return new Promise((resolve) => {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        try {
+          const arrayBuffer = e.target?.result as ArrayBuffer;
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+          const channelData = audioBuffer.getChannelData(0);
+          const sampleRate = audioBuffer.sampleRate;
+          
+          const pitches: PitchData[] = [];
+          const windowSize = 4096;
+          const hopSize = windowSize / 4;
+          
+          for (let i = 0; i < channelData.length - windowSize; i += hopSize) {
+            const window = channelData.slice(i, i + windowSize);
+            const frequency = detectPitch(window, sampleRate);
+            
+            if (frequency > 80 && frequency < 2000) { // Valid vocal range
+              const note = frequencyToNote(frequency);
+              pitches.push({
+                time: i / sampleRate,
+                frequency,
+                note,
+                confidence: 0.8
+              });
+            }
+          }
+          
+          resolve(pitches);
+        } catch (error) {
+          console.error('Audio processing error:', error);
+          resolve([]);
+        }
+      };
+      
+      reader.readAsArrayBuffer(audioBlob);
+    });
+  };
+
+  const detectPitch = (buffer: Float32Array, sampleRate: number): number => {
+    // Autocorrelation-based pitch detection
+    const correlations = new Array(buffer.length).fill(0);
+    
+    for (let lag = 1; lag < buffer.length; lag++) {
+      let correlation = 0;
+      for (let i = 0; i < buffer.length - lag; i++) {
+        correlation += buffer[i] * buffer[i + lag];
+      }
+      correlations[lag] = correlation;
+    }
+    
+    // Find the lag with maximum correlation (first peak after zero)
+    let maxCorrelation = 0;
+    let bestLag = 0;
+    
+    for (let lag = Math.floor(sampleRate / 800); lag < Math.floor(sampleRate / 80); lag++) {
+      if (correlations[lag] > maxCorrelation) {
+        maxCorrelation = correlations[lag];
+        bestLag = lag;
+      }
+    }
+    
+    return bestLag > 0 ? sampleRate / bestLag : 0;
+  };
+
+  const frequencyToNote = (frequency: number): string => {
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const a4 = 440;
+    const c0 = a4 * Math.pow(2, -4.75);
+    
+    if (frequency > 0) {
+      const h = 12 * Math.log2(frequency / c0);
+      const octave = Math.floor(h / 12);
+      const n = Math.round(h % 12);
+      return noteNames[n] + octave;
+    }
+    return 'C4';
+  };
+
+  const findBestKey = (frequencies: number[]): string => {
+    const notes = frequencies.map(f => frequencyToNote(f));
+    const noteClasses = notes.map(note => note.replace(/\d+/, ''));
+    
+    // Count occurrences of each note class
+    const noteCounts: { [key: string]: number } = {};
+    noteClasses.forEach(note => {
+      noteCounts[note] = (noteCounts[note] || 0) + 1;
+    });
+    
+    // Find the most common note - likely the tonic
+    const mostCommonNote = Object.keys(noteCounts).reduce((a, b) => 
+      noteCounts[a] > noteCounts[b] ? a : b
+    );
+    
+    return mostCommonNote || 'C';
+  };
+
+  const quantizeToKey = (frequencies: number[], key: string): number[] => {
+    // Major scale intervals (semitones from root)
+    const majorScale = [0, 2, 4, 5, 7, 9, 11];
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const keyIndex = noteNames.indexOf(key);
+    
+    return frequencies.map(freq => {
+      const note = frequencyToNote(freq);
+      const noteClass = note.replace(/\d+/, '');
+      const noteIndex = noteNames.indexOf(noteClass);
+      
+      // Find closest note in the key
+      const relativeNote = (noteIndex - keyIndex + 12) % 12;
+      const closestScaleNote = majorScale.reduce((prev, curr) => 
+        Math.abs(curr - relativeNote) < Math.abs(prev - relativeNote) ? curr : prev
+      );
+      
+      const quantizedNoteIndex = (keyIndex + closestScaleNote) % 12;
+      const octave = parseInt(note.replace(/[A-G]#?/, '')) || 4;
+      
+      // Convert back to frequency
+      const c0 = 16.35; // C0 frequency
+      const semitones = quantizedNoteIndex + (octave * 12);
+      return c0 * Math.pow(2, semitones / 12);
+    });
+  };
+
+  const generateMelodicAudio = async (instrumentId: string, variationType: string, melody: number[], key: string): Promise<string> => {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const sampleRate = audioContext.sampleRate;
-    const duration = 3;
-    const bufferLength = sampleRate * duration;
+    const noteDuration = 0.5; // seconds per note
+    const totalDuration = melody.length * noteDuration;
+    const bufferLength = sampleRate * totalDuration;
     const audioBuffer = audioContext.createBuffer(1, bufferLength, sampleRate);
     const channelData = audioBuffer.getChannelData(0);
 
-    // Generate different sounds based on instrument and variation
-    const baseFreq = getBaseFrequency(instrumentId, variationType);
-    const pattern = getPattern(instrumentId, variationType);
-    
-    pattern.forEach((beat, beatIndex) => {
-      const startSample = Math.floor(beat.time * sampleRate);
-      const beatDuration = Math.floor(beat.duration * sampleRate);
+    melody.forEach((frequency, noteIndex) => {
+      const startSample = Math.floor(noteIndex * noteDuration * sampleRate);
+      const endSample = Math.floor((noteIndex + 1) * noteDuration * sampleRate);
       
-      for (let i = 0; i < beatDuration && startSample + i < bufferLength; i++) {
-        const time = i / sampleRate;
-        let sample = generateSample(instrumentId, variationType, time, baseFreq, beat.velocity);
+      for (let i = startSample; i < endSample && i < bufferLength; i++) {
+        const time = (i - startSample) / sampleRate;
+        const envelope = Math.exp(-time * 2) * (1 - Math.exp(-time * 20)); // ADSR envelope
         
-        // Add variation-specific modifications
-        sample = applyVariationEffects(sample, variationType, time, index);
+        let sample = generateInstrumentSample(instrumentId, variationType, time, frequency);
+        sample *= envelope * 0.3;
         
-        channelData[startSample + i] += sample * 0.3;
+        channelData[i] += sample;
       }
     });
 
@@ -154,79 +302,31 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
     return URL.createObjectURL(blob);
   };
 
-  const getBaseFrequency = (instrumentId: string, variationType: string): number => {
-    const frequencies: { [key: string]: { [key: string]: number } } = {
-      guitar: { 'acoustic-bright': 220, 'acoustic-mellow': 196, 'electric-clean': 247, 'electric-distorted': 220, 'classical': 196 },
-      piano: { 'grand-piano': 440, 'upright-piano': 415, 'electric-piano': 466, 'soft-piano': 392, 'jazz-piano': 440 },
-      drums: { 'kick-punchy': 60, 'kick-deep': 45, 'snare-crisp': 200, 'snare-fat': 180, 'hi-hat-tight': 8000 },
-      bass: { 'electric-bass': 82, 'upright-bass': 73, 'synth-bass': 87, '808-bass': 55, 'fretless-bass': 82 },
-      synth: { 'lead-bright': 523, 'lead-warm': 440, 'pad-ambient': 220, 'bass-deep': 87, 'arp-plucky': 659 },
-      violin: { 'classical': 440, 'folk': 415, 'electric': 466, 'pizzicato': 440, 'tremolo': 440 }
-    };
-    return frequencies[instrumentId]?.[variationType] || 440;
-  };
-
-  const getPattern = (instrumentId: string, variationType: string) => {
-    if (instrumentId === 'drums') {
-      return [
-        { time: 0.0, velocity: 0.8, duration: 0.2 },
-        { time: 0.5, velocity: 0.6, duration: 0.15 },
-        { time: 1.0, velocity: 0.7, duration: 0.2 },
-        { time: 1.5, velocity: 0.5, duration: 0.1 }
-      ];
-    }
-    return [
-      { time: 0.0, velocity: 0.7, duration: 0.8 },
-      { time: 1.0, velocity: 0.6, duration: 0.6 },
-      { time: 2.0, velocity: 0.8, duration: 1.0 }
-    ];
-  };
-
-  const generateSample = (instrumentId: string, variationType: string, time: number, baseFreq: number, velocity: number): number => {
+  const generateInstrumentSample = (instrumentId: string, variationType: string, time: number, frequency: number): number => {
     switch (instrumentId) {
-      case 'drums':
-        if (variationType.includes('kick')) {
-          return Math.sin(2 * Math.PI * baseFreq * time) * Math.exp(-time * 25) * velocity;
-        } else if (variationType.includes('snare')) {
-          return (Math.random() * 2 - 1) * Math.exp(-time * 20) * velocity * 0.4;
-        } else {
-          return (Math.random() * 2 - 1) * Math.exp(-time * 50) * velocity * 0.2;
-        }
       case 'guitar':
-        return (Math.sin(2 * Math.PI * baseFreq * time) + 
-               0.3 * Math.sin(2 * Math.PI * baseFreq * 2 * time) +
-               0.1 * Math.sin(2 * Math.PI * baseFreq * 3 * time)) * 
-               Math.exp(-time * 6) * velocity * 0.4;
+        return (Math.sin(2 * Math.PI * frequency * time) + 
+               0.3 * Math.sin(2 * Math.PI * frequency * 2 * time) +
+               0.1 * Math.sin(2 * Math.PI * frequency * 3 * time)) * 0.7;
       case 'piano':
-        return (Math.sin(2 * Math.PI * baseFreq * time) + 
-               0.5 * Math.sin(2 * Math.PI * baseFreq * 2 * time)) * 
-               Math.exp(-time * 3) * velocity * 0.5;
-      case 'bass':
-        return Math.sin(2 * Math.PI * baseFreq * time) * Math.exp(-time * 2) * velocity;
-      case 'synth':
-        return Math.sin(2 * Math.PI * baseFreq * time) * Math.exp(-time * 4) * velocity;
+        return (Math.sin(2 * Math.PI * frequency * time) + 
+               0.5 * Math.sin(2 * Math.PI * frequency * 2 * time) +
+               0.2 * Math.sin(2 * Math.PI * frequency * 4 * time)) * 0.8;
       case 'violin':
-        return (Math.sin(2 * Math.PI * baseFreq * time) + 
-               0.2 * Math.sin(2 * Math.PI * baseFreq * 3 * time)) * 
-               Math.exp(-time * 1) * velocity * 0.6;
+        return (Math.sin(2 * Math.PI * frequency * time) + 
+               0.4 * Math.sin(2 * Math.PI * frequency * 3 * time) +
+               0.1 * Math.sin(2 * Math.PI * frequency * 5 * time)) * 0.6;
+      case 'synth':
+        if (variationType.includes('saw')) {
+          return (2 / Math.PI) * Math.atan(Math.tan((Math.PI * frequency * time) % (2 * Math.PI))) * 0.8;
+        }
+        return Math.sin(2 * Math.PI * frequency * time) * 0.7;
+      case 'bass':
+        return Math.sin(2 * Math.PI * frequency * time) + 
+               0.3 * Math.sin(2 * Math.PI * frequency * 0.5 * time);
       default:
-        return Math.sin(2 * Math.PI * baseFreq * time) * Math.exp(-time * 5) * velocity;
+        return Math.sin(2 * Math.PI * frequency * time);
     }
-  };
-
-  const applyVariationEffects = (sample: number, variationType: string, time: number, index: number): number => {
-    // Add subtle variations based on type and index
-    if (variationType.includes('bright')) {
-      sample *= (1 + 0.2 * Math.sin(2 * Math.PI * time * 10));
-    } else if (variationType.includes('mellow') || variationType.includes('soft')) {
-      sample *= 0.8;
-    } else if (variationType.includes('distorted')) {
-      sample = Math.tanh(sample * 3) * 0.7;
-    }
-    
-    // Add slight frequency variation based on index
-    const variation = 1 + (index * 0.05);
-    return sample * variation;
   };
 
   const audioBufferToWav = (buffer: AudioBuffer): ArrayBuffer => {
@@ -290,7 +390,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
     
     const newTrack = {
       id: Date.now(),
-      name: `${instrument?.name} - ${variation.name}`,
+      name: variation.name,
       type: variation.type,
       instrument: selectedInstrument,
       volume: 0.8,
@@ -299,19 +399,21 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       color: getInstrumentColor(selectedInstrument),
       audioUrl: variation.audioUrl,
       originalVoice: recordedVoiceUrl,
-      userDescription: `${instrument?.name} - ${variation.name}`
+      melody: variation.melody,
+      userDescription: `${instrument?.name} melody - ${variation.name}`
     };
 
     onTrackCreated(newTrack);
     
     toast({
-      title: "Track Added!",
-      description: `${variation.name} track added to mixer`,
+      title: "Melodic Track Added!",
+      description: `${variation.name} with your melody added to mixer`,
     });
 
     // Reset for next recording
     setTrackVariations([]);
     setRecordedVoiceUrl('');
+    setDetectedMelody([]);
   };
 
   return (
@@ -319,10 +421,10 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Mic className="w-5 h-5 text-neon-blue" />
-          <span>Voice to Track</span>
+          <span>Voice to Melody</span>
         </CardTitle>
         <CardDescription>
-          Select an instrument, record your voice, then choose from AI-generated variations
+          Hum or sing a melody - we'll capture the pitch sequence and convert it to your chosen instrument
         </CardDescription>
       </CardHeader>
       
@@ -339,6 +441,16 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
           recordedVoiceUrl={recordedVoiceUrl}
           disabled={isProcessing || !selectedInstrument}
         />
+
+        {detectedMelody.length > 0 && (
+          <div className="bg-muted/10 p-4 rounded-lg border border-dark-border">
+            <h4 className="text-sm font-medium text-gray-300 mb-2">Detected Melody:</h4>
+            <div className="text-xs text-gray-400">
+              <p>Notes captured: {detectedMelody.map(p => p.note).join(' → ')}</p>
+              <p>Duration: {detectedMelody.length} notes</p>
+            </div>
+          </div>
+        )}
 
         <TrackVariationSelector
           variations={trackVariations}
