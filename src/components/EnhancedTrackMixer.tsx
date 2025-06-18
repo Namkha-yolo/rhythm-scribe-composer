@@ -1,10 +1,9 @@
-
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { Play, Pause, Volume2, VolumeX, Mic, Wand2, RotateCcw } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Mic, Headphones, Wand2, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Track {
@@ -17,6 +16,7 @@ interface Track {
   effects: string[];
   color: string;
   audioUrl?: string;
+  originalVoice?: string;
 }
 
 interface EnhancedTrackMixerProps {
@@ -29,18 +29,41 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
   const [masterVolume, setMasterVolume] = useState(0.8);
   const [isRecordingEffects, setIsRecordingEffects] = useState(false);
   const [selectedTrackForEffects, setSelectedTrackForEffects] = useState<number | null>(null);
+  const [playingTracks, setPlayingTracks] = useState<{ [key: number]: HTMLAudioElement }>({});
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const { toast } = useToast();
 
   const togglePlayback = () => {
-    setIsPlaying(!isPlaying);
-    
-    if (!isPlaying) {
+    if (isPlaying) {
+      // Stop all tracks
+      Object.values(playingTracks).forEach(audio => {
+        audio.pause();
+        audio.currentTime = 0;
+      });
+      setPlayingTracks({});
+    } else {
+      // Play all tracks
+      const newPlayingTracks: { [key: number]: HTMLAudioElement } = {};
+      
+      tracks.forEach(track => {
+        if (track.audioUrl && !track.muted) {
+          const audio = new Audio(track.audioUrl);
+          audio.volume = track.volume * masterVolume;
+          audio.loop = true;
+          audio.play().catch(console.error);
+          newPlayingTracks[track.id] = audio;
+        }
+      });
+      
+      setPlayingTracks(newPlayingTracks);
+      
       toast({
         title: "Playback Started",
-        description: "Playing all tracks",
+        description: "Playing all generated tracks",
       });
     }
+    
+    setIsPlaying(!isPlaying);
   };
 
   const updateTrackVolume = (trackId: number, volume: number) => {
@@ -48,6 +71,11 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
       track.id === trackId ? { ...track, volume: volume / 100 } : track
     );
     onTracksUpdated(updatedTracks);
+    
+    // Update playing audio volume
+    if (playingTracks[trackId]) {
+      playingTracks[trackId].volume = (volume / 100) * masterVolume;
+    }
   };
 
   const toggleTrackMute = (trackId: number) => {
@@ -55,6 +83,39 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
       track.id === trackId ? { ...track, muted: !track.muted } : track
     );
     onTracksUpdated(updatedTracks);
+    
+    // Mute/unmute playing audio
+    if (playingTracks[trackId]) {
+      const track = updatedTracks.find(t => t.id === trackId);
+      if (track?.muted) {
+        playingTracks[trackId].pause();
+      } else {
+        playingTracks[trackId].play();
+      }
+    }
+  };
+
+  const playGeneratedTrack = (track: Track) => {
+    if (track.audioUrl) {
+      const audio = new Audio(track.audioUrl);
+      audio.volume = track.volume * masterVolume;
+      audio.play();
+      toast({
+        title: "Playing Generated Track",
+        description: `Playing ${track.type} sounds created from your voice`,
+      });
+    }
+  };
+
+  const playOriginalVoice = (track: Track) => {
+    if (track.originalVoice) {
+      const audio = new Audio(track.originalVoice);
+      audio.play();
+      toast({
+        title: "Playing Original Voice",
+        description: `Playing your original ${track.type} recording`,
+      });
+    }
   };
 
   const startEffectsRecording = async (trackId: number) => {
@@ -103,7 +164,6 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
 
   const processEffectsCommand = async (audioBlob: Blob, trackId: number) => {
     try {
-      // Convert to base64 for API
       const arrayBuffer = await audioBlob.arrayBuffer();
       const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
@@ -135,14 +195,12 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
       const data = await response.json();
       const responseText = data.choices[0].message.content;
       
-      // Extract JSON array from response
       const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
       let newEffects: string[] = [];
       
       if (jsonMatch) {
         newEffects = JSON.parse(jsonMatch[0]);
       } else {
-        // Fallback - try to extract effect names from text
         const commonEffects = ['reverb', 'delay', 'chorus', 'distortion', 'compression', 'eq', 'filter'];
         newEffects = commonEffects.filter(effect => 
           responseText.toLowerCase().includes(effect)
@@ -187,17 +245,6 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
     onTracksUpdated(updatedTracks);
   };
 
-  const playOriginalVoice = (track: Track) => {
-    if (track.audioUrl) {
-      const audio = new Audio(track.audioUrl);
-      audio.play();
-      toast({
-        title: "Playing Original Voice",
-        description: `Playing your ${track.type} recording`,
-      });
-    }
-  };
-
   if (tracks.length === 0) {
     return (
       <Card className="bg-dark-surface border-dark-border">
@@ -215,7 +262,7 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
           <div className="text-center py-8 text-gray-400">
             <Volume2 className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>No tracks created yet</p>
-            <p className="text-sm">Record your voice to create tracks</p>
+            <p className="text-sm">Record your voice to create instrument tracks</p>
           </div>
         </CardContent>
       </Card>
@@ -230,7 +277,7 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
           <span>Track Mixer</span>
         </CardTitle>
         <CardDescription>
-          Mix your voice-generated tracks and add effects
+          Mix your voice-generated instrument tracks and add effects
         </CardDescription>
       </CardHeader>
       
@@ -268,7 +315,7 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
 
         {/* Individual Tracks */}
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-200">Voice-Generated Tracks</h4>
+          <h4 className="font-medium text-gray-200">Generated Instrument Tracks</h4>
           
           {tracks.map((track) => (
             <div
@@ -287,13 +334,25 @@ const EnhancedTrackMixer = ({ tracks, onTracksUpdated }: EnhancedTrackMixerProps
                 <div className="flex items-center space-x-2">
                   {track.audioUrl && (
                     <Button
+                      onClick={() => playGeneratedTrack(track)}
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-400 hover:text-neon-green"
+                      title="Play generated instrument track"
+                    >
+                      <Headphones className="w-4 h-4" />
+                    </Button>
+                  )}
+                  
+                  {track.originalVoice && (
+                    <Button
                       onClick={() => playOriginalVoice(track)}
                       variant="ghost"
                       size="sm"
                       className="text-gray-400 hover:text-neon-purple"
                       title="Play original voice recording"
                     >
-                      <Play className="w-4 h-4" />
+                      <Mic className="w-4 h-4" />
                     </Button>
                   )}
                   
