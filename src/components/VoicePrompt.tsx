@@ -1,11 +1,10 @@
-
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Mic, Square, Volume2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { transcribeVoice } from '@/services/bedrock';
+import { transcribeVoice } from '@/services/rilla-api';
 
 interface VoicePromptProps {
   onPromptRecorded: (prompt: string) => void;
@@ -30,7 +29,7 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
 
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(chunks, { type: 'audio/wav' });
-        await transcribeWithBedrock(audioBlob);
+        await transcribeWithRilla(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -58,12 +57,12 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
     }
   };
 
-  const transcribeWithBedrock = async (audioBlob: Blob) => {
+  const transcribeWithRilla = async (audioBlob: Blob) => {
     setIsTranscribing(true);
     
     try {
       toast({
-        title: "AWS Bedrock Transcribing",
+        title: "Rilla AI Transcribing",
         description: "Processing your voice with Claude...",
       });
 
@@ -71,14 +70,14 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
       onPromptRecorded(transcription);
       
       toast({
-        title: "Voice Transcribed by Bedrock",
+        title: "Voice Transcribed by Rilla AI",
         description: "Your prompt has been processed by Claude",
       });
     } catch (error) {
-      console.error('Bedrock transcription error:', error);
+      console.error('Rilla transcription error:', error);
       toast({
         title: "Transcription Error",
-        description: "Could not process audio with Bedrock",
+        description: "Could not process audio with Rilla AI",
         variant: "destructive",
       });
     } finally {
@@ -91,7 +90,7 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Volume2 className="w-5 h-5 text-neon-blue" />
-          <span>AWS Bedrock Voice Transcription</span>
+          <span>Rilla AI Voice Transcription</span>
         </CardTitle>
         <CardDescription>
           Describe your music style - transcribed by Claude AI
@@ -125,7 +124,7 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
           <div className="text-center space-y-2">
             <div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-sm text-neon-blue">
-              AWS Bedrock (Claude) is transcribing your voice...
+              Rilla AI (Claude) is transcribing your voice...
             </p>
           </div>
         )}
@@ -133,7 +132,7 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
         {/* Text Prompt Display/Edit */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-gray-300">
-            Music Style Prompt (Bedrock Enhanced):
+            Music Style Prompt (Rilla AI Enhanced):
           </label>
           <Textarea
             value={currentPrompt}
@@ -145,7 +144,7 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
 
         {/* Example Prompts */}
         <div className="space-y-2">
-          <p className="text-xs text-gray-400">Example prompts for Bedrock:</p>
+          <p className="text-xs text-gray-400">Example prompts for Rilla AI:</p>
           <div className="flex flex-wrap gap-2">
             {[
               "Lo-fi hip hop with vinyl crackle and jazz chords",

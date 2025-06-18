@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mic, MicOff, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { analyzeBeatPattern, BeatAnalysisResult } from '@/services/bedrock';
+import { analyzeBeatPattern, BeatAnalysisResult } from '@/services/rilla-api';
 
 interface BeatRecorderProps {
   onBeatsRecorded: (beats: { timestamps: number[], pitches: string[] }) => void;
@@ -48,7 +48,7 @@ const BeatRecorder = ({ onBeatsRecorded, recordedBeats }: BeatRecorderProps) => 
 
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(chunks, { type: 'audio/wav' });
-        await processAudioWithBedrock(audioBlob);
+        await processAudioWithRilla(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -106,12 +106,12 @@ const BeatRecorder = ({ onBeatsRecorded, recordedBeats }: BeatRecorderProps) => 
     updateLevel();
   }, []);
 
-  const processAudioWithBedrock = async (audioBlob: Blob) => {
+  const processAudioWithRilla = async (audioBlob: Blob) => {
     setIsAnalyzing(true);
     
     try {
       toast({
-        title: "Analyzing with AWS Bedrock",
+        title: "Analyzing with Rilla AI",
         description: "Processing your rhythm pattern...",
       });
 
@@ -128,10 +128,10 @@ const BeatRecorder = ({ onBeatsRecorded, recordedBeats }: BeatRecorderProps) => 
         description: `Found ${result.timestamps.length} beats (${result.bpm} BPM, ${Math.round(result.confidence * 100)}% confidence)`,
       });
     } catch (error) {
-      console.error('Bedrock analysis error:', error);
+      console.error('Rilla analysis error:', error);
       toast({
         title: "Analysis Error",
-        description: "Could not analyze audio with Bedrock",
+        description: "Could not analyze audio with Rilla AI",
         variant: "destructive",
       });
     } finally {
@@ -153,10 +153,10 @@ const BeatRecorder = ({ onBeatsRecorded, recordedBeats }: BeatRecorderProps) => 
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Mic className="w-5 h-5 text-neon-green" />
-          <span>AWS Bedrock Rhythm Analyzer</span>
+          <span>Rilla AI Rhythm Analyzer</span>
         </CardTitle>
         <CardDescription>
-          Record mouth taps - analyzed by Amazon Bedrock AI
+          Record mouth taps - analyzed by Rilla AI models
         </CardDescription>
       </CardHeader>
       
@@ -193,7 +193,7 @@ const BeatRecorder = ({ onBeatsRecorded, recordedBeats }: BeatRecorderProps) => 
           <div className="text-center space-y-2">
             <div className="w-8 h-8 border-2 border-neon-green border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-sm text-neon-green">
-              AWS Bedrock is analyzing your rhythm pattern...
+              Rilla AI is analyzing your rhythm pattern...
             </p>
           </div>
         )}
@@ -214,11 +214,11 @@ const BeatRecorder = ({ onBeatsRecorded, recordedBeats }: BeatRecorderProps) => 
           </div>
         )}
 
-        {/* Beat Pattern Display with Bedrock Analysis */}
+        {/* Beat Pattern Display with Rilla Analysis */}
         {analysisResult && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-gray-300">Bedrock Analysis:</h4>
+              <h4 className="text-sm font-medium text-gray-300">Rilla AI Analysis:</h4>
               <div className="text-xs text-neon-green">
                 {analysisResult.bpm} BPM • {Math.round(analysisResult.confidence * 100)}% confidence
               </div>
