@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mic } from 'lucide-react';
@@ -6,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import InstrumentSelector, { INSTRUMENT_OPTIONS } from './InstrumentSelector';
 import VoiceRecorder from './VoiceRecorder';
 import TrackVariationSelector from './TrackVariationSelector';
+import { analyzeMelodyWithRilla, generateInstrumentTrackWithRilla } from '@/services/melody-rilla-api';
 
 interface VoiceTrackRecorderProps {
   onTrackCreated: (track: any) => void;
@@ -70,7 +70,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       const instrument = INSTRUMENT_OPTIONS.find(i => i.id === selectedInstrument);
       toast({
         title: "Recording Started",
-        description: `Hum your melody - we'll capture the pitch sequence for ${instrument?.name}`,
+        description: `Hum your melody - Rilla AI will capture the pitch sequence for ${instrument?.name}`,
       });
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -97,47 +97,61 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       const instrument = INSTRUMENT_OPTIONS.find(i => i.id === selectedInstrument);
       if (!instrument) return;
 
-      // Analyze pitch from the audio blob
-      const pitchData = await extractPitchSequence(audioBlob);
-      setDetectedMelody(pitchData);
+      // Step 1: Extract basic pitch data locally
+      const localPitchData = await extractPitchSequence(audioBlob);
+      setDetectedMelody(localPitchData);
       
-      // Convert to musical notes and find best key
-      const melody = pitchData.map(p => p.frequency);
-      const bestKey = findBestKey(melody);
-      const quantizedNotes = quantizeToKey(melody, bestKey);
-      
-      console.log('Detected melody:', pitchData.map(p => p.note));
-      console.log('Best key:', bestKey);
-      console.log('Quantized notes:', quantizedNotes);
+      // Step 2: Use Rilla AI to analyze and clean up the melody
+      toast({
+        title: "Rilla AI Processing",
+        description: "Analyzing your melody with Claude 3.5 Sonnet...",
+      });
 
-      // Generate multiple variations for the selected instrument
+      const noteSequence = localPitchData.map(p => p.note).filter(note => note && !note.includes('NaN'));
+      const rillaAnalysis = await analyzeMelodyWithRilla(noteSequence, instrument.id);
+      
+      console.log('Rilla AI melody analysis:', rillaAnalysis);
+
+      // Step 3: Generate instrument tracks using Rilla AI
       const variations: TrackVariation[] = [];
       
       for (let i = 0; i < Math.min(3, instrument.variations.length); i++) {
         const variationType = instrument.variations[i];
-        const audioUrl = await generateMelodicAudio(instrument.id, variationType, quantizedNotes, bestKey);
+        
+        toast({
+          title: "Generating Tracks",
+          description: `Creating ${formatVariationName(variationType)} with LLaMA 4 Maverick...`,
+        });
+
+        const audioUrl = await generateInstrumentTrackWithRilla(
+          rillaAnalysis.cleanMelody,
+          rillaAnalysis.detectedKey,
+          instrument.id,
+          variationType,
+          rillaAnalysis.tempo
+        );
         
         variations.push({
           id: `${instrument.id}-${variationType}-${Date.now()}-${i}`,
-          name: `${formatVariationName(variationType)} in ${bestKey}`,
+          name: `${formatVariationName(variationType)} in ${rillaAnalysis.detectedKey}`,
           type: variationType,
           audioUrl,
-          confidence: 0.9 - (i * 0.1),
-          melody: quantizedNotes
+          confidence: rillaAnalysis.confidence - (i * 0.1),
+          melody: rillaAnalysis.cleanMelody
         });
       }
 
       setTrackVariations(variations);
       
       toast({
-        title: "Melody Captured!",
-        description: `Created ${variations.length} ${instrument.name} variations with your melody in ${bestKey}`,
+        title: "Rilla AI Success!",
+        description: `Created ${variations.length} ${instrument.name} variations in ${rillaAnalysis.detectedKey}`,
       });
     } catch (error) {
-      console.error('Pitch analysis error:', error);
+      console.error('Rilla AI melody processing error:', error);
       toast({
-        title: "Processing Error",
-        description: "Could not analyze pitch sequence",
+        title: "Rilla AI Error",
+        description: "Could not process melody with Rilla AI",
         variant: "destructive",
       });
     } finally {
@@ -165,7 +179,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
             const window = channelData.slice(i, i + windowSize);
             const frequency = detectPitch(window, sampleRate);
             
-            if (frequency > 80 && frequency < 2000) { // Valid vocal range
+            if (frequency > 80 && frequency < 2000) {
               const note = frequencyToNote(frequency);
               pitches.push({
                 time: i / sampleRate,
@@ -188,7 +202,6 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
   };
 
   const detectPitch = (buffer: Float32Array, sampleRate: number): number => {
-    // Autocorrelation-based pitch detection
     const correlations = new Array(buffer.length).fill(0);
     
     for (let lag = 1; lag < buffer.length; lag++) {
@@ -199,7 +212,6 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       correlations[lag] = correlation;
     }
     
-    // Find the lag with maximum correlation (first peak after zero)
     let maxCorrelation = 0;
     let bestLag = 0;
     
@@ -225,146 +237,6 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       return noteNames[n] + octave;
     }
     return 'C4';
-  };
-
-  const findBestKey = (frequencies: number[]): string => {
-    const notes = frequencies.map(f => frequencyToNote(f));
-    const noteClasses = notes.map(note => note.replace(/\d+/, ''));
-    
-    // Count occurrences of each note class
-    const noteCounts: { [key: string]: number } = {};
-    noteClasses.forEach(note => {
-      noteCounts[note] = (noteCounts[note] || 0) + 1;
-    });
-    
-    // Find the most common note - likely the tonic
-    const mostCommonNote = Object.keys(noteCounts).reduce((a, b) => 
-      noteCounts[a] > noteCounts[b] ? a : b
-    );
-    
-    return mostCommonNote || 'C';
-  };
-
-  const quantizeToKey = (frequencies: number[], key: string): number[] => {
-    // Major scale intervals (semitones from root)
-    const majorScale = [0, 2, 4, 5, 7, 9, 11];
-    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const keyIndex = noteNames.indexOf(key);
-    
-    return frequencies.map(freq => {
-      const note = frequencyToNote(freq);
-      const noteClass = note.replace(/\d+/, '');
-      const noteIndex = noteNames.indexOf(noteClass);
-      
-      // Find closest note in the key
-      const relativeNote = (noteIndex - keyIndex + 12) % 12;
-      const closestScaleNote = majorScale.reduce((prev, curr) => 
-        Math.abs(curr - relativeNote) < Math.abs(prev - relativeNote) ? curr : prev
-      );
-      
-      const quantizedNoteIndex = (keyIndex + closestScaleNote) % 12;
-      const octave = parseInt(note.replace(/[A-G]#?/, '')) || 4;
-      
-      // Convert back to frequency
-      const c0 = 16.35; // C0 frequency
-      const semitones = quantizedNoteIndex + (octave * 12);
-      return c0 * Math.pow(2, semitones / 12);
-    });
-  };
-
-  const generateMelodicAudio = async (instrumentId: string, variationType: string, melody: number[], key: string): Promise<string> => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const sampleRate = audioContext.sampleRate;
-    const noteDuration = 0.5; // seconds per note
-    const totalDuration = melody.length * noteDuration;
-    const bufferLength = sampleRate * totalDuration;
-    const audioBuffer = audioContext.createBuffer(1, bufferLength, sampleRate);
-    const channelData = audioBuffer.getChannelData(0);
-
-    melody.forEach((frequency, noteIndex) => {
-      const startSample = Math.floor(noteIndex * noteDuration * sampleRate);
-      const endSample = Math.floor((noteIndex + 1) * noteDuration * sampleRate);
-      
-      for (let i = startSample; i < endSample && i < bufferLength; i++) {
-        const time = (i - startSample) / sampleRate;
-        const envelope = Math.exp(-time * 2) * (1 - Math.exp(-time * 20)); // ADSR envelope
-        
-        let sample = generateInstrumentSample(instrumentId, variationType, time, frequency);
-        sample *= envelope * 0.3;
-        
-        channelData[i] += sample;
-      }
-    });
-
-    // Convert to WAV
-    const wavBuffer = audioBufferToWav(audioBuffer);
-    const blob = new Blob([wavBuffer], { type: 'audio/wav' });
-    return URL.createObjectURL(blob);
-  };
-
-  const generateInstrumentSample = (instrumentId: string, variationType: string, time: number, frequency: number): number => {
-    switch (instrumentId) {
-      case 'guitar':
-        return (Math.sin(2 * Math.PI * frequency * time) + 
-               0.3 * Math.sin(2 * Math.PI * frequency * 2 * time) +
-               0.1 * Math.sin(2 * Math.PI * frequency * 3 * time)) * 0.7;
-      case 'piano':
-        return (Math.sin(2 * Math.PI * frequency * time) + 
-               0.5 * Math.sin(2 * Math.PI * frequency * 2 * time) +
-               0.2 * Math.sin(2 * Math.PI * frequency * 4 * time)) * 0.8;
-      case 'violin':
-        return (Math.sin(2 * Math.PI * frequency * time) + 
-               0.4 * Math.sin(2 * Math.PI * frequency * 3 * time) +
-               0.1 * Math.sin(2 * Math.PI * frequency * 5 * time)) * 0.6;
-      case 'synth':
-        if (variationType.includes('saw')) {
-          return (2 / Math.PI) * Math.atan(Math.tan((Math.PI * frequency * time) % (2 * Math.PI))) * 0.8;
-        }
-        return Math.sin(2 * Math.PI * frequency * time) * 0.7;
-      case 'bass':
-        return Math.sin(2 * Math.PI * frequency * time) + 
-               0.3 * Math.sin(2 * Math.PI * frequency * 0.5 * time);
-      default:
-        return Math.sin(2 * Math.PI * frequency * time);
-    }
-  };
-
-  const audioBufferToWav = (buffer: AudioBuffer): ArrayBuffer => {
-    const length = buffer.length;
-    const arrayBuffer = new ArrayBuffer(44 + length * 2);
-    const view = new DataView(arrayBuffer);
-    const channels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    
-    const writeString = (offset: number, string: string) => {
-      for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-      }
-    };
-    
-    writeString(0, 'RIFF');
-    view.setUint32(4, 36 + length * 2, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, channels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(36, 'data');
-    view.setUint32(40, length * 2, true);
-    
-    const channelData = buffer.getChannelData(0);
-    let offset = 44;
-    for (let i = 0; i < length; i++) {
-      const sample = Math.max(-1, Math.min(1, channelData[i]));
-      view.setInt16(offset, sample * 0x7FFF, true);
-      offset += 2;
-    }
-    
-    return arrayBuffer;
   };
 
   const formatVariationName = (variationType: string): string => {
@@ -406,11 +278,10 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
     onTrackCreated(newTrack);
     
     toast({
-      title: "Melodic Track Added!",
+      title: "Rilla AI Track Added!",
       description: `${variation.name} with your melody added to mixer`,
     });
 
-    // Reset for next recording
     setTrackVariations([]);
     setRecordedVoiceUrl('');
     setDetectedMelody([]);
@@ -421,10 +292,10 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Mic className="w-5 h-5 text-neon-blue" />
-          <span>Voice to Melody</span>
+          <span>Voice to Melody (Rilla AI)</span>
         </CardTitle>
         <CardDescription>
-          Hum or sing a melody - we'll capture the pitch sequence and convert it to your chosen instrument
+          Hum or sing a melody - Rilla AI will capture the pitch sequence and convert it to your chosen instrument
         </CardDescription>
       </CardHeader>
       
@@ -444,10 +315,10 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
 
         {detectedMelody.length > 0 && (
           <div className="bg-muted/10 p-4 rounded-lg border border-dark-border">
-            <h4 className="text-sm font-medium text-gray-300 mb-2">Detected Melody:</h4>
+            <h4 className="text-sm font-medium text-gray-300 mb-2">Raw Melody Captured:</h4>
             <div className="text-xs text-gray-400">
-              <p>Notes captured: {detectedMelody.map(p => p.note).join(' → ')}</p>
-              <p>Duration: {detectedMelody.length} notes</p>
+              <p>Notes detected: {detectedMelody.map(p => p.note).join(' → ')}</p>
+              <p>Duration: {detectedMelody.length} notes (being processed by Rilla AI...)</p>
             </div>
           </div>
         )}
@@ -457,6 +328,17 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
           onSelectVariation={handleVariationSelected}
           isGenerating={isProcessing}
         />
+
+        {/* Rilla AI Info */}
+        {!isProcessing && (
+          <div className="bg-muted/10 p-3 rounded-lg border border-dark-border">
+            <p className="text-xs text-gray-400 mb-1">Powered by Rilla AI:</p>
+            <div className="text-xs space-y-1">
+              <p className="text-neon-blue">• Claude 3.5 Sonnet - Melody Analysis & Key Detection</p>
+              <p className="text-neon-green">• LLaMA 4 Maverick - Instrument Track Generation</p>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
