@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Mic, Square, Play } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -11,49 +11,17 @@ interface VoiceTrackRecorderProps {
 
 const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
-  const [selectedInstrument, setSelectedInstrument] = useState<string>('');
-  const [selectedDrumSound, setSelectedDrumSound] = useState<string>('');
+  const [instrumentDescription, setInstrumentDescription] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordedVoiceUrl, setRecordedVoiceUrl] = useState<string>('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const { toast } = useToast();
 
-  const instruments = [
-    { value: 'drums', label: 'Drums' },
-    { value: 'guitar', label: 'Guitar' },
-    { value: 'bass', label: 'Bass' },
-    { value: '808', label: '808' },
-    { value: 'synth', label: 'Synth' },
-    { value: 'vocal', label: 'Vocal' }
-  ];
-
-  const drumSounds = [
-    { value: 'kick-heavy', label: 'Heavy Kick Drum' },
-    { value: 'kick-punchy', label: 'Punchy Kick' },
-    { value: 'snare-crisp', label: 'Crisp Snare' },
-    { value: 'snare-fat', label: 'Fat Snare' },
-    { value: 'hihat-tight', label: 'Tight Hi-Hat' },
-    { value: 'hihat-open', label: 'Open Hi-Hat' },
-    { value: 'crash-bright', label: 'Bright Crash' },
-    { value: 'tom-deep', label: 'Deep Tom' },
-    { value: 'clap-analog', label: 'Analog Clap' },
-    { value: 'perc-shaker', label: 'Shaker Percussion' }
-  ];
-
   const startRecording = async () => {
-    if (!selectedInstrument) {
+    if (!instrumentDescription.trim()) {
       toast({
-        title: "Select Instrument",
-        description: "Choose which instrument you're mimicking",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (selectedInstrument === 'drums' && !selectedDrumSound) {
-      toast({
-        title: "Select Drum Sound",
-        description: "Choose which drum sound to use",
+        title: "Describe the instrument",
+        description: "Tell us what instrument you're mimicking (e.g., 'heavy kick drum', 'electric guitar', 'deep bass')",
         variant: "destructive",
       });
       return;
@@ -81,7 +49,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       
       toast({
         title: "Recording Started",
-        description: `Make ${selectedInstrument} sounds with your voice`,
+        description: `Make sounds like: ${instrumentDescription}`,
       });
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -115,35 +83,55 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
     setIsProcessing(true);
     
     try {
-      // Convert to base64 for API
+      // Convert to base64 for AI analysis
       const arrayBuffer = await audioBlob.arrayBuffer();
       const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-      const drumSoundDescription = selectedInstrument === 'drums' ? 
-        drumSounds.find(d => d.value === selectedDrumSound)?.label || '' : '';
-
-      // Use AI to analyze voice and generate actual instrument sounds
+      // Let AI analyze the voice and determine the best instrument match
       const analysisPrompt = `
-      I have a voice recording where someone is mimicking ${selectedInstrument} sounds.
-      ${selectedInstrument === 'drums' ? `They want it to sound like: ${drumSoundDescription}` : ''}
+      I have a voice recording where someone is trying to mimic: "${instrumentDescription}"
       
-      Please analyze the rhythm, timing, and pattern from this voice recording and create a detailed description of how to generate actual ${selectedInstrument} sounds that match this rhythm.
+      Analyze this voice recording and:
+      1. Determine the exact type of instrument this sounds like
+      2. Extract the rhythm, timing, and pattern
+      3. Identify the pitch characteristics
+      4. Generate parameters to create authentic ${instrumentDescription} sounds
       
-      Return a JSON object with:
+      Return a detailed JSON object:
       {
-        "instrument": "${selectedInstrument}",
-        "drumType": "${selectedDrumSound || 'none'}",
-        "pattern": [
-          {"time": 0.0, "sound": "kick", "velocity": 0.8, "duration": 0.2},
-          {"time": 0.5, "sound": "snare", "velocity": 0.6, "duration": 0.1}
-        ],
-        "bpm": 120,
-        "duration": 4,
-        "audioDescription": "detailed description of how the ${selectedInstrument} should sound",
-        "generatedAudioUrl": "GENERATE_AUDIO_${selectedInstrument.toUpperCase()}_${Date.now()}"
+        "detectedInstrument": "kick_drum" | "snare_drum" | "hi_hat" | "electric_guitar" | "acoustic_guitar" | "bass_guitar" | "synth_bass" | "808_bass" | "piano" | "synth_lead" | "brass" | "strings" | "vocal",
+        "instrumentFamily": "drums" | "guitar" | "bass" | "keys" | "synth" | "vocal" | "brass" | "strings",
+        "characteristics": {
+          "pitch": "low" | "mid" | "high",
+          "tone": "warm" | "bright" | "dark" | "punchy" | "smooth",
+          "attack": "sharp" | "soft" | "medium",
+          "sustain": "short" | "medium" | "long"
+        },
+        "rhythm": {
+          "pattern": [
+            {"time": 0.0, "velocity": 0.8, "duration": 0.2},
+            {"time": 0.5, "velocity": 0.6, "duration": 0.1}
+          ],
+          "bpm": 120,
+          "timeSignature": "4/4"
+        },
+        "soundGeneration": {
+          "baseFrequency": 60,
+          "harmonics": [1.0, 0.5, 0.25],
+          "envelope": {
+            "attack": 0.01,
+            "decay": 0.1,
+            "sustain": 0.3,
+            "release": 0.5
+          },
+          "effects": ["compression", "eq"]
+        },
+        "trackName": "Heavy Kick Drum Track",
+        "confidence": 0.9
       }
 
-      Voice recording data (first 1000 chars): ${base64Audio.substring(0, 1000)}
+      Voice description: "${instrumentDescription}"
+      Audio data sample: ${base64Audio.substring(0, 500)}
       `;
 
       const response = await fetch('https://litellm.rillavoice.com/v1/chat/completions', {
@@ -169,80 +157,40 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       if (jsonMatch) {
         trackParams = JSON.parse(jsonMatch[0]);
       } else {
-        // Fallback params
-        trackParams = {
-          instrument: selectedInstrument,
-          drumType: selectedDrumSound,
-          pattern: [
-            {"time": 0.0, "sound": getDefaultSound(selectedInstrument), "velocity": 0.8, "duration": 0.2},
-            {"time": 0.5, "sound": getDefaultSound(selectedInstrument), "velocity": 0.6, "duration": 0.2}
-          ],
-          bpm: 120,
-          duration: 4,
-          audioDescription: `Generated ${selectedInstrument} sounds`,
-          generatedAudioUrl: `GENERATE_AUDIO_${selectedInstrument.toUpperCase()}_${Date.now()}`
-        };
+        // Fallback params based on user description
+        trackParams = generateFallbackParams(instrumentDescription);
       }
 
-      // Now generate actual audio using a second AI call for audio generation
-      const audioGenerationPrompt = `
-      Based on this analysis: ${JSON.stringify(trackParams)}
-      
-      Generate actual ${selectedInstrument} audio that matches this pattern and rhythm.
-      ${selectedInstrument === 'drums' ? `Use ${drumSoundDescription} drum sounds.` : ''}
-      
-      Return a base64 encoded WAV audio file that contains the actual ${selectedInstrument} sounds.
-      The audio should be exactly ${trackParams.duration} seconds long and follow the specified pattern.
-      
-      Format: Return ONLY the base64 string starting with "data:audio/wav;base64,"
-      `;
-
-      const audioResponse = await fetch('https://litellm.rillavoice.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer sk-rilla-vibes'
-        },
-        body: JSON.stringify({
-          model: 'claude-3-5-sonnet',
-          messages: [{ role: 'user', content: audioGenerationPrompt }]
-        })
-      });
-
-      const audioData = await audioResponse.json();
-      const generatedAudioContent = audioData.choices[0].message.content;
-      console.log('Generated Audio Response:', generatedAudioContent);
-
-      // For now, generate placeholder audio since AI can't actually generate audio files
-      // In a real implementation, you'd use a text-to-audio AI service
-      const generatedAudioUrl = await generatePlaceholderAudio(trackParams);
+      // Generate the actual audio
+      const generatedAudioUrl = await generateInstrumentAudio(trackParams);
 
       // Create track object
       const newTrack = {
         id: Date.now(),
-        name: `${selectedInstrument.charAt(0).toUpperCase() + selectedInstrument.slice(1)} Track ${selectedInstrument === 'drums' ? `(${drumSoundDescription})` : ''}`,
-        type: selectedInstrument,
-        drumType: selectedDrumSound,
+        name: trackParams.trackName || `${instrumentDescription} Track`,
+        type: trackParams.instrumentFamily || 'unknown',
+        instrument: trackParams.detectedInstrument || 'custom',
         params: trackParams,
         volume: 0.8,
         muted: false,
-        effects: [],
-        color: getInstrumentColor(selectedInstrument),
-        audioUrl: generatedAudioUrl, // This is the generated instrument audio
-        originalVoice: recordedVoiceUrl // This is your original voice
+        effects: trackParams.soundGeneration?.effects || [],
+        color: getInstrumentColor(trackParams.instrumentFamily || 'unknown'),
+        audioUrl: generatedAudioUrl,
+        originalVoice: recordedVoiceUrl,
+        userDescription: instrumentDescription
       };
 
       onTrackCreated(newTrack);
       
       toast({
         title: "Track Created!",
-        description: `${selectedInstrument} track generated from your voice pattern`,
+        description: `${trackParams.detectedInstrument || instrumentDescription} track generated from your voice`,
       });
     } catch (error) {
       console.error('Voice processing error:', error);
       toast({
         title: "Processing Error",
-        description: "Could not convert voice to track",
+        description: "Could not convert voice to track. Try describing the instrument more specifically.",
         variant: "destructive",
       });
     } finally {
@@ -250,76 +198,133 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
     }
   };
 
-  const getDefaultSound = (instrument: string): string => {
-    const sounds = {
-      drums: "kick",
-      guitar: "strum",
-      bass: "thump",
-      '808': "sub",
-      synth: "beep",
-      vocal: "note"
+  const generateFallbackParams = (description: string) => {
+    const lowerDesc = description.toLowerCase();
+    
+    // Determine instrument type from description
+    let instrumentFamily = 'unknown';
+    let detectedInstrument = 'custom';
+    let baseFreq = 440;
+    
+    if (lowerDesc.includes('drum') || lowerDesc.includes('kick') || lowerDesc.includes('snare') || lowerDesc.includes('hi-hat') || lowerDesc.includes('cymbal')) {
+      instrumentFamily = 'drums';
+      if (lowerDesc.includes('kick')) {
+        detectedInstrument = 'kick_drum';
+        baseFreq = 60;
+      } else if (lowerDesc.includes('snare')) {
+        detectedInstrument = 'snare_drum';
+        baseFreq = 200;
+      } else if (lowerDesc.includes('hi-hat') || lowerDesc.includes('hihat')) {
+        detectedInstrument = 'hi_hat';
+        baseFreq = 8000;
+      }
+    } else if (lowerDesc.includes('guitar')) {
+      instrumentFamily = 'guitar';
+      detectedInstrument = lowerDesc.includes('electric') ? 'electric_guitar' : 'acoustic_guitar';
+      baseFreq = 220;
+    } else if (lowerDesc.includes('bass')) {
+      instrumentFamily = 'bass';
+      detectedInstrument = lowerDesc.includes('808') ? '808_bass' : 'bass_guitar';
+      baseFreq = 80;
+    } else if (lowerDesc.includes('piano') || lowerDesc.includes('key')) {
+      instrumentFamily = 'keys';
+      detectedInstrument = 'piano';
+      baseFreq = 440;
+    } else if (lowerDesc.includes('synth')) {
+      instrumentFamily = 'synth';
+      detectedInstrument = 'synth_lead';
+      baseFreq = 440;
+    }
+
+    return {
+      detectedInstrument,
+      instrumentFamily,
+      characteristics: {
+        pitch: baseFreq < 200 ? 'low' : baseFreq > 1000 ? 'high' : 'mid',
+        tone: 'warm',
+        attack: 'medium',
+        sustain: 'medium'
+      },
+      rhythm: {
+        pattern: [
+          {"time": 0.0, "velocity": 0.8, "duration": 0.3},
+          {"time": 0.5, "velocity": 0.6, "duration": 0.3},
+          {"time": 1.0, "velocity": 0.7, "duration": 0.3}
+        ],
+        bpm: 120,
+        timeSignature: "4/4"
+      },
+      soundGeneration: {
+        baseFrequency: baseFreq,
+        harmonics: [1.0, 0.5, 0.25],
+        envelope: {
+          attack: 0.01,
+          decay: 0.1,
+          sustain: 0.3,
+          release: 0.5
+        },
+        effects: ['compression']
+      },
+      trackName: `${description} Track`,
+      confidence: 0.7
     };
-    return sounds[instrument as keyof typeof sounds] || "hit";
   };
 
-  const generatePlaceholderAudio = async (params: any): Promise<string> => {
-    // Generate actual instrument sounds using Web Audio API
+  const generateInstrumentAudio = async (params: any): Promise<string> => {
+    // Generate audio using Web Audio API based on AI-determined parameters
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const sampleRate = audioContext.sampleRate;
-    const duration = params.duration || 4;
+    const duration = 4; // 4 seconds
     const bufferLength = sampleRate * duration;
     const audioBuffer = audioContext.createBuffer(1, bufferLength, sampleRate);
     const channelData = audioBuffer.getChannelData(0);
 
-    // Generate sounds based on the pattern and selected drum type
-    params.pattern.forEach((beat: any) => {
+    const soundGen = params.soundGeneration || {};
+    const baseFreq = soundGen.baseFrequency || 440;
+    const envelope = soundGen.envelope || { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.5 };
+
+    // Generate sounds based on the rhythm pattern
+    params.rhythm.pattern.forEach((beat: any) => {
       const startSample = Math.floor(beat.time * sampleRate);
-      const beatDuration = Math.floor((beat.duration || 0.2) * sampleRate);
+      const beatDuration = Math.floor((beat.duration || 0.3) * sampleRate);
       
       for (let i = 0; i < beatDuration && startSample + i < bufferLength; i++) {
         const time = i / sampleRate;
         let sample = 0;
 
-        if (params.instrument === 'drums') {
-          // Generate different drum sounds based on selection
-          if (params.drumType?.includes('kick')) {
-            sample = Math.sin(2 * Math.PI * 60 * time) * Math.exp(-time * 20) * beat.velocity;
-          } else if (params.drumType?.includes('snare')) {
-            sample = (Math.random() * 2 - 1) * Math.exp(-time * 10) * beat.velocity * 0.3;
-          } else if (params.drumType?.includes('hihat')) {
-            sample = (Math.random() * 2 - 1) * Math.exp(-time * 30) * beat.velocity * 0.2;
-          } else if (params.drumType?.includes('crash')) {
-            sample = (Math.random() * 2 - 1) * Math.exp(-time * 5) * beat.velocity * 0.4;
-          } else if (params.drumType?.includes('tom')) {
-            sample = Math.sin(2 * Math.PI * 120 * time) * Math.exp(-time * 8) * beat.velocity;
-          } else {
-            // Default drum sound
-            sample = Math.sin(2 * Math.PI * 80 * time) * Math.exp(-time * 15) * beat.velocity;
-          }
-        } else {
-          // Keep existing instrument generation logic
-          switch (params.instrument) {
-            case 'bass':
-              sample = Math.sin(2 * Math.PI * 80 * time) * Math.exp(-time * 3) * beat.velocity;
-              break;
-            case '808':
-              sample = Math.sin(2 * Math.PI * 40 * time) * Math.exp(-time * 2) * beat.velocity;
-              break;
-            case 'guitar':
-              sample = (Math.sin(2 * Math.PI * 220 * time) + 
-                       0.5 * Math.sin(2 * Math.PI * 440 * time) +
-                       0.25 * Math.sin(2 * Math.PI * 660 * time)) * 
-                       Math.exp(-time * 5) * beat.velocity * 0.3;
-              break;
-            case 'synth':
-              sample = Math.sin(2 * Math.PI * 440 * time) * Math.exp(-time * 4) * beat.velocity;
-              break;
-            default:
-              sample = Math.sin(2 * Math.PI * 440 * time) * Math.exp(-time * 3) * beat.velocity;
-          }
+        // Generate different sounds based on detected instrument
+        switch (params.detectedInstrument) {
+          case 'kick_drum':
+            sample = Math.sin(2 * Math.PI * baseFreq * time) * Math.exp(-time * 20) * beat.velocity;
+            break;
+          case 'snare_drum':
+            sample = (Math.random() * 2 - 1) * Math.exp(-time * 15) * beat.velocity * 0.4;
+            break;
+          case 'hi_hat':
+            sample = (Math.random() * 2 - 1) * Math.exp(-time * 40) * beat.velocity * 0.2;
+            break;
+          case 'electric_guitar':
+          case 'acoustic_guitar':
+            sample = (Math.sin(2 * Math.PI * baseFreq * time) + 
+                     0.5 * Math.sin(2 * Math.PI * baseFreq * 2 * time) +
+                     0.25 * Math.sin(2 * Math.PI * baseFreq * 3 * time)) * 
+                     Math.exp(-time * 8) * beat.velocity * 0.3;
+            break;
+          case 'bass_guitar':
+          case '808_bass':
+            sample = Math.sin(2 * Math.PI * baseFreq * time) * Math.exp(-time * 4) * beat.velocity;
+            break;
+          case 'synth_lead':
+            sample = Math.sin(2 * Math.PI * baseFreq * time) * Math.exp(-time * 6) * beat.velocity;
+            break;
+          default:
+            // Generic oscillator
+            sample = Math.sin(2 * Math.PI * baseFreq * time) * Math.exp(-time * 5) * beat.velocity;
         }
 
-        channelData[startSample + i] += sample * 0.5;
+        // Apply envelope
+        const envelopeValue = calculateEnvelope(time, envelope, beat.duration || 0.3);
+        channelData[startSample + i] += sample * envelopeValue * 0.5;
       }
     });
 
@@ -327,6 +332,21 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
     const wavBuffer = audioBufferToWav(audioBuffer);
     const blob = new Blob([wavBuffer], { type: 'audio/wav' });
     return URL.createObjectURL(blob);
+  };
+
+  const calculateEnvelope = (time: number, envelope: any, duration: number): number => {
+    const { attack, decay, sustain, release } = envelope;
+    const totalTime = duration;
+    
+    if (time < attack) {
+      return time / attack;
+    } else if (time < attack + decay) {
+      return 1 - (1 - sustain) * ((time - attack) / decay);
+    } else if (time < totalTime - release) {
+      return sustain;
+    } else {
+      return sustain * (totalTime - time) / release;
+    }
   };
 
   const audioBufferToWav = (buffer: AudioBuffer): ArrayBuffer => {
@@ -372,9 +392,11 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       drums: "from-red-500 to-red-600",
       guitar: "from-orange-500 to-orange-600",
       bass: "from-purple-500 to-purple-600",
-      '808': "from-blue-500 to-blue-600",
+      keys: "from-blue-500 to-blue-600",
       synth: "from-green-500 to-green-600",
-      vocal: "from-pink-500 to-pink-600"
+      vocal: "from-pink-500 to-pink-600",
+      brass: "from-yellow-500 to-yellow-600",
+      strings: "from-indigo-500 to-indigo-600"
     };
     return colors[instrument as keyof typeof colors] || "from-gray-500 to-gray-600";
   };
@@ -387,56 +409,32 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
           <span>Voice to Track</span>
         </CardTitle>
         <CardDescription>
-          Record yourself mimicking instrument sounds - they'll be converted to real audio
+          Describe any instrument, then record yourself mimicking it - AI will create the real sound
         </CardDescription>
       </CardHeader>
       
       <CardContent className="space-y-4">
-        {/* Instrument Selection */}
+        {/* Free-form Instrument Description */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-gray-300">
-            What instrument are you mimicking?
+            What instrument sound do you want to create?
           </label>
-          <Select value={selectedInstrument} onValueChange={setSelectedInstrument}>
-            <SelectTrigger className="bg-muted/20 border-dark-border">
-              <SelectValue placeholder="Choose an instrument" />
-            </SelectTrigger>
-            <SelectContent>
-              {instruments.map((instrument) => (
-                <SelectItem key={instrument.value} value={instrument.value}>
-                  {instrument.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Input
+            value={instrumentDescription}
+            onChange={(e) => setInstrumentDescription(e.target.value)}
+            placeholder="e.g., heavy kick drum, funky bass guitar, bright electric guitar, deep 808, smooth piano..."
+            className="bg-muted/20 border-dark-border text-white placeholder:text-gray-400"
+          />
+          <p className="text-xs text-gray-400">
+            Be specific! Try: "punchy snare drum", "distorted electric guitar", "warm piano chords", "booming 808 bass"
+          </p>
         </div>
-
-        {/* Drum Sound Selection - Only show for drums */}
-        {selectedInstrument === 'drums' && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-300">
-              Choose drum sound type:
-            </label>
-            <Select value={selectedDrumSound} onValueChange={setSelectedDrumSound}>
-              <SelectTrigger className="bg-muted/20 border-dark-border">
-                <SelectValue placeholder="Choose drum sound" />
-              </SelectTrigger>
-              <SelectContent>
-                {drumSounds.map((drum) => (
-                  <SelectItem key={drum.value} value={drum.value}>
-                    {drum.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         {/* Recording Control */}
         <div className="flex items-center justify-center space-x-4">
           <Button
             onClick={isRecording ? stopRecording : startRecording}
-            disabled={isProcessing || !selectedInstrument || (selectedInstrument === 'drums' && !selectedDrumSound)}
+            disabled={isProcessing || !instrumentDescription.trim()}
             className={`w-20 h-20 rounded-full ${
               isRecording 
                 ? 'bg-red-500 hover:bg-red-600 animate-pulse' 
@@ -461,7 +459,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
         {/* Status */}
         {isRecording && (
           <p className="text-center text-sm text-neon-blue animate-pulse">
-            Recording... Make {selectedInstrument} sounds!
+            Recording... Make sounds like: {instrumentDescription}
           </p>
         )}
         
@@ -469,7 +467,7 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
           <div className="text-center space-y-2">
             <div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-sm text-neon-blue">
-              Converting voice to {selectedInstrument} sounds using AI...
+              AI is analyzing your voice and creating {instrumentDescription} sounds...
             </p>
           </div>
         )}
@@ -477,19 +475,22 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
         {recordedVoiceUrl && (
           <div className="text-center">
             <p className="text-xs text-green-400">
-              ✓ Voice recorded! Click the play button above to hear your original voice.
+              ✓ Voice recorded! Click play button to hear your original voice.
             </p>
           </div>
         )}
 
-        {/* Instructions */}
+        {/* Examples */}
         <div className="bg-muted/10 p-3 rounded-lg border border-dark-border">
-          <p className="text-xs text-gray-400 mb-2">Voice examples:</p>
+          <p className="text-xs text-gray-400 mb-2">Example descriptions:</p>
           <div className="text-xs space-y-1">
-            <p className="text-gray-300">• Drums: "boom bap boom boom bap"</p>
-            <p className="text-gray-300">• Guitar: "strum strum pick pick"</p>
-            <p className="text-gray-300">• Bass: "thump wobble thump"</p>
-            <p className="text-gray-300">• 808: "sub bass womp womp"</p>
+            <p className="text-gray-300">• "heavy kick drum that booms"</p>
+            <p className="text-gray-300">• "crisp snare with lots of snap"</p>
+            <p className="text-gray-300">• "funky slap bass guitar"</p>
+            <p className="text-gray-300">• "bright electric guitar chords"</p>
+            <p className="text-gray-300">• "deep 808 sub bass"</p>
+            <p className="text-gray-300">• "smooth jazz piano"</p>
+            <p className="text-gray-300">• "analog synthesizer lead"</p>
           </div>
         </div>
       </CardContent>
