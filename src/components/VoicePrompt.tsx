@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Textarea } from '@/components/ui/textarea';
 import { Mic, Square, Volume2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { transcribeVoice } from '@/services/bedrock';
 
 interface VoicePromptProps {
   onPromptRecorded: (prompt: string) => void;
@@ -29,7 +30,7 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
 
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(chunks, { type: 'audio/wav' });
-        await transcribeAudio(audioBlob);
+        await transcribeWithBedrock(audioBlob);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -57,25 +58,27 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
     }
   };
 
-  const transcribeAudio = async (audioBlob: Blob) => {
+  const transcribeWithBedrock = async (audioBlob: Blob) => {
     setIsTranscribing(true);
     
     try {
-      // Mock transcription (in real app, this would call AWS Bedrock)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      const mockTranscription = "Create a jazz-influenced track with smooth guitar and soft drums";
-      
-      onPromptRecorded(mockTranscription);
+      toast({
+        title: "AWS Bedrock Transcribing",
+        description: "Processing your voice with Claude...",
+      });
+
+      const transcription = await transcribeVoice(audioBlob);
+      onPromptRecorded(transcription);
       
       toast({
-        title: "Voice Transcribed",
-        description: "Your prompt has been processed",
+        title: "Voice Transcribed by Bedrock",
+        description: "Your prompt has been processed by Claude",
       });
     } catch (error) {
-      console.error('Transcription error:', error);
+      console.error('Bedrock transcription error:', error);
       toast({
         title: "Transcription Error",
-        description: "Could not process audio",
+        description: "Could not process audio with Bedrock",
         variant: "destructive",
       });
     } finally {
@@ -88,10 +91,10 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Volume2 className="w-5 h-5 text-neon-blue" />
-          <span>Voice Prompt</span>
+          <span>AWS Bedrock Voice Transcription</span>
         </CardTitle>
         <CardDescription>
-          Describe the music style you want to generate
+          Describe your music style - transcribed by Claude AI
         </CardDescription>
       </CardHeader>
       
@@ -119,15 +122,18 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
         )}
         
         {isTranscribing && (
-          <p className="text-center text-sm text-neon-green animate-pulse">
-            Transcribing your voice...
-          </p>
+          <div className="text-center space-y-2">
+            <div className="w-6 h-6 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-sm text-neon-blue">
+              AWS Bedrock (Claude) is transcribing your voice...
+            </p>
+          </div>
         )}
 
         {/* Text Prompt Display/Edit */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-gray-300">
-            Music Style Prompt:
+            Music Style Prompt (Bedrock Enhanced):
           </label>
           <Textarea
             value={currentPrompt}
@@ -139,13 +145,13 @@ const VoicePrompt = ({ onPromptRecorded, currentPrompt }: VoicePromptProps) => {
 
         {/* Example Prompts */}
         <div className="space-y-2">
-          <p className="text-xs text-gray-400">Example prompts:</p>
+          <p className="text-xs text-gray-400">Example prompts for Bedrock:</p>
           <div className="flex flex-wrap gap-2">
             {[
-              "Lo-fi hip hop with vinyl crackle",
-              "Energetic rock with electric guitar",
-              "Ambient electronic with synth pads",
-              "Jazz fusion with saxophone"
+              "Lo-fi hip hop with vinyl crackle and jazz chords",
+              "Energetic rock with electric guitar and driving drums",
+              "Ambient electronic with evolving synth pads",
+              "Jazz fusion with saxophone and complex rhythms"
             ].map((example, index) => (
               <Button
                 key={index}
