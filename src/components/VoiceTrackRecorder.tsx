@@ -1,3 +1,4 @@
+
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -99,13 +100,13 @@ const VoiceTrackRecorder = ({ onTrackCreated }: VoiceTrackRecorderProps) => {
       
       Return a detailed JSON object:
       {
-        "detectedInstrument": "kick_drum" | "snare_drum" | "hi_hat" | "electric_guitar" | "acoustic_guitar" | "bass_guitar" | "synth_bass" | "808_bass" | "piano" | "synth_lead" | "brass" | "strings" | "vocal",
-        "instrumentFamily": "drums" | "guitar" | "bass" | "keys" | "synth" | "vocal" | "brass" | "strings",
+        "detectedInstrument": "kick_drum",
+        "instrumentFamily": "drums",
         "characteristics": {
-          "pitch": "low" | "mid" | "high",
-          "tone": "warm" | "bright" | "dark" | "punchy" | "smooth",
-          "attack": "sharp" | "soft" | "medium",
-          "sustain": "short" | "medium" | "long"
+          "pitch": "low",
+          "tone": "punchy",
+          "attack": "sharp",
+          "sustain": "short"
         },
         "rhythm": {
           "pattern": [
