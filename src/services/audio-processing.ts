@@ -1,3 +1,4 @@
+
 import { RealSampleLibrary } from './audio/real-sample-library';
 import { ProfessionalVoiceProcessor } from './audio/professional-voice-processor';
 import { AdvancedPitchDetector } from './audio/advanced-pitch-detection';
@@ -68,7 +69,7 @@ export class VoiceProcessor {
       }
       
       // Apply instrument-specific processing
-      const processedBuffer = await this.applyInstrumentProcessing(buffer, instrumentType, variationType);
+      const processedBuffer = await this.applyInstrumentProcessing(buffer, instrumentType, variationType, audioContext);
       
       // Convert to WAV and return URL
       const wavBuffer = this.audioBufferToWav(processedBuffer);
@@ -135,9 +136,9 @@ export class VoiceProcessor {
   private async applyInstrumentProcessing(
     buffer: AudioBuffer,
     instrumentType: string,
-    variationType: string
+    variationType: string,
+    audioContext: AudioContext
   ): Promise<AudioBuffer> {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const processedBuffer = audioContext.createBuffer(
       buffer.numberOfChannels,
       buffer.length,
