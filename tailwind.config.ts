@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,7 +62,15 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+				// Music production theme colors
+				'neon-green': '#00ff88',
+				'neon-blue': '#0088ff',
+				'neon-purple': '#8800ff',
+				'neon-pink': '#ff0088',
+				'dark-bg': '#0a0a0a',
+				'dark-surface': '#1a1a1a',
+				'dark-border': '#333333'
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
@@ -84,11 +93,28 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'pulse-beat': {
+					'0%, 100%': { 
+						transform: 'scale(1)',
+						boxShadow: '0 0 0 0 rgba(0, 255, 136, 0.7)'
+					},
+					'50%': { 
+						transform: 'scale(1.05)',
+						boxShadow: '0 0 0 10px rgba(0, 255, 136, 0)'
+					}
+				},
+				'waveform': {
+					'0%': { height: '10%' },
+					'50%': { height: '100%' },
+					'100%': { height: '10%' }
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'pulse-beat': 'pulse-beat 0.6s ease-in-out infinite',
+				'waveform': 'waveform 1s ease-in-out infinite'
 			}
 		}
 	},
