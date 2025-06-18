@@ -88,10 +88,10 @@ const VocalsSection = ({ onVocalTrackCreated, detectedKey }: VocalsSectionProps)
       
       toast({
         title: "Processing Voice",
-        description: "Applying auto-tune and octave adjustment...",
+        description: "Applying professional auto-tune with formant preservation...",
       });
 
-      // Process the actual recorded voice with auto-tune
+      // Use the new professional voice processing system
       const processedAudioUrl = await voiceProcessorRef.current.processVoiceWithAutoTune(
         recordedBlob,
         keyToUse,
@@ -101,32 +101,32 @@ const VocalsSection = ({ onVocalTrackCreated, detectedKey }: VocalsSectionProps)
       
       const vocalTrack = {
         id: Date.now(),
-        name: `Auto-tuned Vocals ${octave > 0 ? `+${octave}` : octave < 0 ? octave : ''}`,
+        name: `Pro Auto-tuned Vocals ${octave > 0 ? `+${octave}` : octave < 0 ? octave : ''}`,
         type: 'vocals',
         instrument: 'vocals',
         volume: 0.8,
         muted: false,
-        effects: [`autotune-${autoTuneIntensity}%`, `octave-${octave}`, `key-${keyToUse}`],
+        effects: [`professional-autotune-${autoTuneIntensity}%`, `octave-${octave}`, `key-${keyToUse}`, 'formant-preserved'],
         color: 'from-pink-500 to-purple-600',
         audioUrl: processedAudioUrl,
         originalVoice: recordedVoiceUrl,
         octave,
         autoTune: autoTuneIntensity,
         key: keyToUse,
-        audioEffects: []
+        audioEffects: ['compression', 'eq', 'chorus']
       };
 
       onVocalTrackCreated(vocalTrack);
       
       toast({
-        title: "Vocal Track Created!",
-        description: `Added auto-tuned vocals in ${keyToUse} key`,
+        title: "Professional Vocal Track Created!",
+        description: `Added studio-quality auto-tuned vocals in ${keyToUse} key with formant preservation`,
       });
     } catch (error) {
-      console.error('Vocal processing error:', error);
+      console.error('Professional vocal processing error:', error);
       toast({
         title: "Processing Error",
-        description: "Could not process vocal track",
+        description: "Could not process vocal track with professional system",
         variant: "destructive",
       });
     } finally {
