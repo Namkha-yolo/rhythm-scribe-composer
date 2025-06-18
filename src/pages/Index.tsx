@@ -3,6 +3,7 @@ import { useState } from 'react';
 import VoiceTrackRecorder from '@/components/VoiceTrackRecorder';
 import EnhancedTrackMixer from '@/components/EnhancedTrackMixer';
 import VocalsSection from '@/components/VocalsSection';
+import EffectsPanel from '@/components/EffectsPanel';
 import KeyDetection from '@/components/KeyDetection';
 import Header from '@/components/Header';
 
@@ -57,10 +58,10 @@ const Index = () => {
               <h3 className="text-lg font-semibold text-white mb-3">How to Use:</h3>
               <div className="space-y-2 text-sm text-gray-300">
                 <p>1. Add instrument tracks by selecting type and recording</p>
-                <p>2. Record vocals with auto-tune and octave controls</p>
+                <p>2. Record vocals with real auto-tune and octave controls</p>
                 <p>3. The AI will detect your song's key automatically</p>
-                <p>4. Set all instruments to the same key for harmony</p>
-                <p>5. Use voice commands to add effects</p>
+                <p>4. Add audio effects like reverb, delay, and chorus</p>
+                <p>5. Use voice commands for additional modifications</p>
               </div>
               
               <div className="mt-4 pt-4 border-t border-dark-border">
@@ -75,9 +76,14 @@ const Index = () => {
             </div>
           </div>
           
-          {/* Right Column - Track Mixer */}
+          {/* Right Column - Track Mixer and Effects */}
           <div className="space-y-8">
             <EnhancedTrackMixer 
+              tracks={tracks}
+              onTracksUpdated={setTracks}
+            />
+            
+            <EffectsPanel 
               tracks={tracks}
               onTracksUpdated={setTracks}
             />
