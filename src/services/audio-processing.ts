@@ -1,4 +1,3 @@
-
 import { RealSampleLibrary } from './audio/real-sample-library';
 import { ProfessionalVoiceProcessor } from './audio/professional-voice-processor';
 import { AdvancedPitchDetector } from './audio/advanced-pitch-detection';
@@ -285,7 +284,8 @@ export class VoiceProcessor {
             audioBuffer,
             effect.parameters.roomSize,
             effect.parameters.decay,
-            effect.parameters.wetness
+            effect.parameters.wetness,
+            audioContext
           );
         }
       }
@@ -303,10 +303,11 @@ export class VoiceProcessor {
     audioBuffer: AudioBuffer,
     roomSize: number,
     decay: number,
-    wetness: number
+    wetness: number,
+    audioContext: AudioContext
   ): Promise<AudioBuffer> {
     // Use convolution reverb for professional quality
-    const processedBuffer = audioBuffer.getAudioContext().createBuffer(
+    const processedBuffer = audioContext.createBuffer(
       audioBuffer.numberOfChannels,
       audioBuffer.length + Math.floor(audioBuffer.sampleRate * decay),
       audioBuffer.sampleRate
