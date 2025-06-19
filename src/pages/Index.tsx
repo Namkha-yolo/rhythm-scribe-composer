@@ -6,13 +6,24 @@ import VocalsSection from '@/components/VocalsSection';
 import EffectsPanel from '@/components/EffectsPanel';
 import KeyDetection from '@/components/KeyDetection';
 import Header from '@/components/Header';
+import WebSampleDisplay from '@/components/WebSampleDisplay';
 
 const Index = () => {
   const [tracks, setTracks] = useState<any[]>([]);
   const [detectedKey, setDetectedKey] = useState<string>('');
+  const [detectedInstrument, setDetectedInstrument] = useState<string>('');
+  const [voiceCharacteristics, setVoiceCharacteristics] = useState<any>(null);
+  const [webSearchTrigger, setWebSearchTrigger] = useState(false);
 
   const handleTrackCreated = (newTrack: any) => {
     setTracks(prevTracks => [...prevTracks, newTrack]);
+    
+    // Trigger web sample search when new track is created
+    if (newTrack.instrument) {
+      setDetectedInstrument(newTrack.instrument);
+      setVoiceCharacteristics(newTrack.voiceCharacteristics);
+      setWebSearchTrigger(prev => !prev); // Toggle to trigger search
+    }
   };
 
   const handleVocalTrackCreated = (vocalTrack: any) => {
@@ -52,6 +63,13 @@ const Index = () => {
               onVocalTrackCreated={handleVocalTrackCreated}
               detectedKey={detectedKey}
             />
+
+            {/* Web Sample Display */}
+            <WebSampleDisplay 
+              detectedInstrument={detectedInstrument}
+              voiceCharacteristics={voiceCharacteristics}
+              searchTrigger={webSearchTrigger}
+            />
             
             {/* Instructions */}
             <div className="bg-muted/10 p-6 rounded-lg border border-dark-border">
@@ -60,8 +78,9 @@ const Index = () => {
                 <p>1. Add instrument tracks by selecting type and recording</p>
                 <p>2. Record vocals with real auto-tune and octave controls</p>
                 <p>3. The AI will detect your song's key automatically</p>
-                <p>4. Add audio effects like reverb, delay, and chorus</p>
-                <p>5. Use voice commands for additional modifications</p>
+                <p>4. Real web samples will be found and displayed automatically</p>
+                <p>5. Add audio effects like reverb, delay, and chorus</p>
+                <p>6. Use voice commands for additional modifications</p>
               </div>
               
               <div className="mt-4 pt-4 border-t border-dark-border">
@@ -71,6 +90,7 @@ const Index = () => {
                   <p className="text-neon-green">🎸 "strum down up down up"</p>
                   <p className="text-neon-pink">🎵 "la la la do re mi"</p>
                   <p className="text-neon-purple">🎛️ "add reverb and delay to this track"</p>
+                  <p className="text-neon-blue">🌐 Web samples auto-load when you record!</p>
                 </div>
               </div>
             </div>
@@ -78,6 +98,12 @@ const Index = () => {
           
           {/* Right Column - Track Mixer and Effects */}
           <div className="space-y-8">
+            <EnhancedTrackMixer 
+              tracks={tracks}
+              onTracksUpdated={setTracks}
+            />
+            
+            <Effects className="space-y-8">
             <EnhancedTrackMixer 
               tracks={tracks}
               onTracksUpdated={setTracks}
